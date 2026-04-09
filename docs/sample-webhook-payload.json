@@ -1,0 +1,37 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WHATSAPP_BUSINESS_ACCOUNT_ID",
+      "changes": [
+        {
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "256700000000",
+              "phone_number_id": "PHONE_NUMBER_ID"
+            },
+            "contacts": [
+              {
+                "profile": { "name": "Test User" },
+                "wa_id": "256712345678"
+              }
+            ],
+            "messages": [
+              {
+                "from": "256712345678",
+                "id": "wamid.test123456",
+                "timestamp": "1704067200",
+                "type": "text",
+                "text": {
+                  "body": "Paid 120,000 for rent today"
+                }
+              }
+            ]
+          },
+          "field": "messages"
+        }
+      ]
+    }
+  ]
+}
