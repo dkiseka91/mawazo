@@ -1,0 +1,20 @@
+{
+  "name": "mawazo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mawazo — AI-powered WhatsApp bookkeeping for Ugandan SMEs",
+  "workspaces": [
+    "packages/*",
+    "shared"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "npm run dev -w packages/webhook",
+    "migrate": "npm run migrate -w packages/database",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}
