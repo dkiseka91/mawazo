@@ -36,3 +36,6 @@ redis_data/
 
 # Test coverage
 coverage/
+
+# Git bundles (temporary export artifacts)
+*.bundle
