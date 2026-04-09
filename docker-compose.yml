@@ -1,0 +1,83 @@
+version: '3.9'
+
+# ── Mawazo local development stack ───────────────────────────────────────────
+# Usage:
+#   docker compose up --build          (full stack)
+#   docker compose up postgres redis   (infra only — for local npm dev)
+#
+# All services share the .env file. Copy .env.example → .env and fill in values.
+
+services:
+
+  # ── PostgreSQL 16 ───────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: mawazo-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER:-mawazo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mawazo_password}
+      POSTGRES_DB:       ${POSTGRES_DB:-mawazo}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Mount migrations and seeds for the init script
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./packages/database/migrations:/docker-entrypoint-initdb.d/migrations:ro
+      - ./packages/database/seeds:/docker-entrypoint-initdb.d/seeds:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mawazo} -d ${POSTGRES_DB:-mawazo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis 7 ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: mawazo-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+      - ./infra/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── Mawazo Webhook Server ────────────────────────────────────────────────────
+  webhook:
+    build:
+      context: .
+      dockerfile: packages/webhook/Dockerfile
+    container_name: mawazo-webhook
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - .env
+    environment:
+      NODE_ENV:     production
+      DATABASE_URL: postgresql://${POSTGRES_USER:-mawazo}:${POSTGRES_PASSWORD:-mawazo_password}@postgres:5432/${POSTGRES_DB:-mawazo}
+      REDIS_URL:    redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
