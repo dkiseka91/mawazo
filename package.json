@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
+    "build:ordered": "npm run build -w shared && npm run build -w packages/momo && npm run build -w packages/ai-engine && npm run build -w packages/webhook",
     "dev": "npm run dev -w packages/webhook",
     "migrate": "npm run migrate -w packages/database",
     "lint": "npm run lint --workspaces --if-present"
