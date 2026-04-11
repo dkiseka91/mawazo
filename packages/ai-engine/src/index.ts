@@ -81,7 +81,7 @@ export async function processMessage(
   await appendMessage(phoneNumber, 'assistant', reply);
   await appendIntentLog(phoneNumber, {
     intent: classified.intent,
-    entities: classified.entities as Record<string, unknown>,
+    entities: classified.entities as unknown as Record<string, unknown>,
   });
 
   return {
