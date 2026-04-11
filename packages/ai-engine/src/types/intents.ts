@@ -11,6 +11,7 @@ export interface ExtractedEntities {
   category: string | null;    // free-text category label from Claude
   period: string | null;      // e.g. "this month", "last week", "January"
   date: string | null;        // ISO date string or relative expression
+  [key: string]: string | number | null;  // index signature — makes this assignable to Record<string, unknown>
 }
 
 export interface ClassifiedIntent {
