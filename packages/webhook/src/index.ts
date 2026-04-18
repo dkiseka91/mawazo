@@ -9,6 +9,7 @@ import 'dotenv/config';
 import express from 'express';
 import { createLogger } from '@mawazo/shared';
 import { whatsappRouter } from './routes/whatsapp';
+import { telegramRouter } from './routes/telegram';
 
 const logger = createLogger('webhook');
 const app = express();
@@ -39,6 +40,9 @@ app.get('/health', (_req, res) => {
 
 // ── WhatsApp webhook ──────────────────────────────────────────────────────────
 app.use('/webhook', whatsappRouter);
+
+// ── Telegram bot ──────────────────────────────────────────────────────────────
+app.use('/telegram', telegramRouter);
 
 // ── 404 handler ───────────────────────────────────────────────────────────────
 app.use((_req, res) => {
