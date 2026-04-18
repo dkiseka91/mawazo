@@ -12,7 +12,7 @@ export interface ConversationMessage {
 
 export interface IntentLogEntry {
   intent: string;
-  entities: Record<string, unknown>;
+  entities: Record<string, string | number | null>;
   timestamp: string;  // ISO string
 }
 
