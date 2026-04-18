@@ -11,6 +11,12 @@ import fs from 'fs';
 import path from 'path';
 import { Pool, PoolClient } from 'pg';
 
+if (!process.env.DATABASE_URL) {
+  console.error('ERROR: DATABASE_URL environment variable is not set.');
+  console.error('In Railway: go to your service → Variables → Add Reference → DATABASE_URL');
+  process.exit(1);
+}
+
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 async function ensureMigrationsTable(client: PoolClient): Promise<void> {
@@ -106,7 +112,24 @@ async function runMigrations(): Promise<void> {
   }
 }
 
-runMigrations().catch((err) => {
-  console.error('Migration failed:', err.message);
-  process.exit(1);
-});
+async function runWithRetry(retries = 5, delayMs = 3000): Promise<void> {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      await runMigrations();
+      return;
+    } catch (err) {
+      const isConnErr = (err as NodeJS.ErrnoException).code === 'ECONNREFUSED'
+        || (err instanceof AggregateError);
+      if (isConnErr && attempt < retries) {
+        console.log(`  PostgreSQL not ready (attempt ${attempt}/${retries}) — retrying in ${delayMs / 1000}s...`);
+        await new Promise((res) => setTimeout(res, delayMs));
+        delayMs *= 2;
+      } else {
+        console.error('Migration failed:', (err as Error).message);
+        process.exit(1);
+      }
+    }
+  }
+}
+
+runWithRetry();
