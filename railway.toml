@@ -3,7 +3,7 @@ builder = "nixpacks"
 buildCommand = "npm install && npm run build:ordered"
 
 [deploy]
-startCommand = "node packages/webhook/dist/index.js"
+startCommand = "NODE_ENV=production node packages/webhook/dist/index.js"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "on_failure"
