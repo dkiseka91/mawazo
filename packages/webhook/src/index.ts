@@ -13,6 +13,8 @@ import { createLogger } from '@mawazo/shared';
 import { checkHealth } from '@mawazo/ai-engine';
 import { whatsappRouter } from './routes/whatsapp';
 import { telegramRouter } from './routes/telegram';
+import { adminRouter }    from './routes/admin';
+import { landingRouter }  from './routes/landing';
 
 const logger = createLogger('webhook');
 const app = express();
@@ -81,6 +83,12 @@ const telegramLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many requests' },
 });
+
+// ── Landing page ──────────────────────────────────────────────────────────────
+app.use('/', landingRouter);
+
+// ── Admin dashboard ───────────────────────────────────────────────────────────
+app.use('/admin', adminRouter);
 
 // ── WhatsApp webhook ──────────────────────────────────────────────────────────
 app.use('/webhook', whatsappRouter);
