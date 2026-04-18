@@ -9,14 +9,20 @@ import pino from 'pino';
  *   logger.info({ phone }, 'Received message');
  */
 export function createLogger(name: string): pino.Logger {
+  let transport: { target: string; options: Record<string, unknown> } | undefined;
+
+  if (process.env.NODE_ENV !== 'production') {
+    try {
+      require.resolve('pino-pretty');
+      transport = { target: 'pino-pretty', options: { colorize: true, translateTime: 'HH:MM:ss' } };
+    } catch {
+      // pino-pretty not installed (production build) — fall back to plain JSON logging
+    }
+  }
+
   return pino({
     name,
     level: process.env.LOG_LEVEL ?? 'info',
-    ...(process.env.NODE_ENV !== 'production' && {
-      transport: {
-        target: 'pino-pretty',
-        options: { colorize: true, translateTime: 'HH:MM:ss' },
-      },
-    }),
+    ...(transport && { transport }),
   });
 }
