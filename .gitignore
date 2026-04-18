@@ -34,6 +34,9 @@ Thumbs.db
 postgres_data/
 redis_data/
 
+# Redis snapshot
+dump.rdb
+
 # Test coverage
 coverage/
 
