@@ -77,7 +77,8 @@ async function runMigrations(): Promise<void> {
         count++;
       } catch (err) {
         await client.query('ROLLBACK');
-        throw new Error(`Failed to apply migration ${file}: ${(err as Error).message}`);
+        console.error(`  ✗ Migration ${file} failed:`, err);
+        throw new Error(`Failed to apply migration ${file}: ${(err as Error).message}`, { cause: err });
       }
     }
 
@@ -95,7 +96,8 @@ async function runMigrations(): Promise<void> {
         count++;
       } catch (err) {
         await client.query('ROLLBACK');
-        throw new Error(`Failed to apply seed ${file}: ${(err as Error).message}`);
+        console.error(`  ✗ Seed ${file} failed:`, err);
+        throw new Error(`Failed to apply seed ${file}: ${(err as Error).message}`, { cause: err });
       }
     }
 
@@ -106,7 +108,10 @@ async function runMigrations(): Promise<void> {
   }
 }
 
-runMigrations().catch((err) => {
-  console.error('Migration failed:', err.message);
+runMigrations().catch((err: Error & { cause?: unknown }) => {
+  console.error('Migration failed:', err.stack ?? err);
+  if (err.cause) {
+    console.error('Caused by:', err.cause);
+  }
   process.exit(1);
 });
