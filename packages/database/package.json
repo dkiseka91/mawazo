@@ -3,8 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "description": "PostgreSQL schema migrations and seeds for Mawazo",
+  "main": "dist/run-migrations.js",
   "scripts": {
-    "migrate": "tsx run-migrations.ts"
+    "build": "tsc",
+    "migrate": "node dist/run-migrations.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
