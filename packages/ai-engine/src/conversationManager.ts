@@ -112,3 +112,8 @@ export async function updateOnboardingStep(
 export async function deleteSession(businessId: string): Promise<void> {
   await getRedis().del(sessionKey(businessId));
 }
+
+export async function pingRedis(): Promise<boolean> {
+  const result = await getRedis().ping();
+  return result === 'PONG';
+}

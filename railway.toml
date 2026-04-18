@@ -4,6 +4,9 @@ buildCommand = "npm install && npm run build:ordered"
 
 [deploy]
 startCommand = "NODE_ENV=production node packages/database/dist/run-migrations.js && node packages/webhook/dist/index.js"
+# Railway polls /health after start. The endpoint probes DB + Redis and returns
+# 503 until both are ready, so Railway will not mark the deploy healthy prematurely.
+# Run post-deploy smoke tests manually: BASE_URL=https://your-app.up.railway.app npm run smoke-test
 healthcheckPath = "/health"
-healthcheckTimeout = 30
+healthcheckTimeout = 60
 restartPolicyType = "on_failure"

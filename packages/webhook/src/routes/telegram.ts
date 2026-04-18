@@ -2,21 +2,50 @@
  * Telegram webhook route.
  *
  * POST /telegram  — receives updates from Telegram Bot API
- * GET  /telegram/set-webhook — convenience endpoint to register the webhook with Telegram
+ * GET  /telegram/set-webhook — registers the webhook with Telegram (admin-only)
+ * GET  /telegram/info        — shows current webhook status (admin-only)
  *
- * Security: Telegram can be configured to send a secret token header
- * (X-Telegram-Bot-Api-Secret-Token). Set TELEGRAM_WEBHOOK_SECRET in env
- * to enable verification. If not set, verification is skipped (dev-friendly).
+ * Security:
+ *  - POST /telegram verifies X-Telegram-Bot-Api-Secret-Token using timing-safe compare.
+ *    TELEGRAM_WEBHOOK_SECRET is required in production; missing it is a startup error.
+ *  - /set-webhook and /info require X-Admin-Secret header matching ADMIN_SECRET env var.
  */
 
 import { Router } from 'express';
 import axios from 'axios';
+import crypto from 'crypto';
 import { createLogger } from '@mawazo/shared';
 import { handleTelegramUpdate } from '../services/telegramRouter';
 import type { TelegramUpdate } from '../types/telegram';
 
 const router = Router();
 const logger = createLogger('webhook:telegram-route');
+
+function timingSafeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) {
+    // Still do a comparison to prevent timing leak on length difference
+    crypto.timingSafeEqual(bufA, bufA);
+    return false;
+  }
+  return crypto.timingSafeEqual(bufA, bufB);
+}
+
+function requireAdminSecret(req: import('express').Request, res: import('express').Response): boolean {
+  const adminSecret = process.env.ADMIN_SECRET;
+  if (!adminSecret) {
+    res.status(503).json({ error: 'ADMIN_SECRET not configured on this server' });
+    return false;
+  }
+  const incoming = req.headers['x-admin-secret'] as string | undefined;
+  if (!incoming || !timingSafeEqual(incoming, adminSecret)) {
+    logger.warn({ ip: req.ip }, 'Rejected admin request — invalid X-Admin-Secret');
+    res.status(403).json({ error: 'Forbidden' });
+    return false;
+  }
+  return true;
+}
 
 /**
  * POST /telegram
@@ -28,9 +57,18 @@ router.post('/', async (req, res) => {
 
   try {
     const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
-    if (secret) {
-      const incoming = req.headers['x-telegram-bot-api-secret-token'];
-      if (incoming !== secret) {
+
+    if (!secret) {
+      // In production this should never happen (startup check in index.ts).
+      // In development, log a warning and continue.
+      if (process.env.NODE_ENV === 'production') {
+        logger.error('TELEGRAM_WEBHOOK_SECRET is not set in production — rejecting all updates');
+        return;
+      }
+      logger.warn('TELEGRAM_WEBHOOK_SECRET not set — skipping verification (dev only)');
+    } else {
+      const incoming = (req.headers['x-telegram-bot-api-secret-token'] as string) ?? '';
+      if (!timingSafeEqual(incoming, secret)) {
         logger.warn({ ip: req.ip }, 'Invalid Telegram secret token — ignoring update');
         return;
       }
@@ -45,10 +83,12 @@ router.post('/', async (req, res) => {
 
 /**
  * GET /telegram/set-webhook?url=https://your-railway-url
- * Call this once after deployment to tell Telegram where to send updates.
- * Example: https://your-app.up.railway.app/telegram/set-webhook?url=https://your-app.up.railway.app
+ * Admin-only. Call once after deployment to register the webhook with Telegram.
+ * Requires X-Admin-Secret header matching ADMIN_SECRET env var.
  */
 router.get('/set-webhook', async (req, res) => {
+  if (!requireAdminSecret(req, res)) return;
+
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
     res.status(500).json({ error: 'TELEGRAM_BOT_TOKEN not set' });
@@ -85,9 +125,11 @@ router.get('/set-webhook', async (req, res) => {
 });
 
 /**
- * GET /telegram/info — check current webhook status
+ * GET /telegram/info — check current webhook status (admin-only)
  */
-router.get('/info', async (_req, res) => {
+router.get('/info', async (req, res) => {
+  if (!requireAdminSecret(req, res)) return;
+
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) {
     res.status(500).json({ error: 'TELEGRAM_BOT_TOKEN not set' });

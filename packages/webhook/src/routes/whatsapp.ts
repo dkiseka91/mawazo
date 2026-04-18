@@ -27,7 +27,7 @@ router.get('/', (req, res) => {
     logger.info('Webhook verification successful');
     res.status(200).send(challenge);
   } else {
-    logger.warn({ mode, token }, 'Webhook verification failed — invalid mode or token');
+    logger.warn({ mode, tokenPresent: !!token }, 'Webhook verification failed — invalid mode or token');
     res.status(403).json({ error: 'Verification failed' });
   }
 });
