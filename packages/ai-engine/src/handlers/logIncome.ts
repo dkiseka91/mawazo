@@ -9,6 +9,10 @@ import type { ClassifiedIntent } from '../types/intents';
 
 const logger = createLogger('ai-engine:logIncome');
 
+function escapeLike(value: string): string {
+  return value.replace(/[%_\\]/g, '\\$&');
+}
+
 export async function handleLogIncome(
   phoneNumber: string,
   userMessage: string,
@@ -33,7 +37,7 @@ export async function handleLogIncome(
     if (parsed) amountUgx = parsed;
   }
 
-  if (!amountUgx) {
+  if (!amountUgx || amountUgx <= 0) {
     return "I noticed you want to record income, but I couldn't find the amount. Can you tell me how much? For example: 'Sold goods for 200,000'";
   }
 
@@ -43,9 +47,9 @@ export async function handleLogIncome(
   const { rows: catRows } = await pool.query<{ id: string }>(
     `SELECT id FROM categories
       WHERE is_system_default = true
-        AND LOWER(name) LIKE LOWER($1)
+        AND LOWER(name) LIKE LOWER($1) ESCAPE '\\'
       LIMIT 1`,
-    [`%${category}%`]
+    [`%${escapeLike(category)}%`]
   );
   const categoryId = catRows[0]?.id ?? null;
 
@@ -53,11 +57,17 @@ export async function handleLogIncome(
     await pool.query(
       `INSERT INTO transactions
         (business_id, amount_ugx, type, category_id, description, source, transaction_date)
-       VALUES ($1, $2, 'credit', $3, $4, 'whatsapp', CURRENT_DATE)`,
+       VALUES ($1, $2, 'credit', $3, $4, 'telegram', CURRENT_DATE)`,
       [business.id, amountUgx, categoryId, description]
     );
 
-    logger.info({ businessId: business.id, amountUgx, description }, 'Income recorded');
+    logger.info({ businessId: business.id, amountUgx }, 'Income recorded');
+
+    // Use Claude's reply (preserves user's language — Luganda, English, etc.)
+    const claudeReply = classified.reply;
+    if (claudeReply && !claudeReply.startsWith("I didn't quite understand")) {
+      return claudeReply;
+    }
     return `Recorded! Income of ${formatUGX(amountUgx)} from ${description}. 💰`;
   } catch (err) {
     logger.error({ err, businessId: business.id }, 'Failed to insert income transaction');
