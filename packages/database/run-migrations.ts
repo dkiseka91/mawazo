@@ -9,11 +9,11 @@
 import 'dotenv/config';
 import fs from 'fs';
 import path from 'path';
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
-async function ensureMigrationsTable(client: Awaited<ReturnType<Pool['connect']>>): Promise<void> {
+async function ensureMigrationsTable(client: PoolClient): Promise<void> {
   await client.query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       filename   VARCHAR(255) PRIMARY KEY,
@@ -22,7 +22,7 @@ async function ensureMigrationsTable(client: Awaited<ReturnType<Pool['connect']>
   `);
 }
 
-async function getApplied(client: Awaited<ReturnType<Pool['connect']>>): Promise<Set<string>> {
+async function getApplied(client: PoolClient): Promise<Set<string>> {
   const { rows } = await client.query<{ filename: string }>(
     'SELECT filename FROM schema_migrations'
   );
@@ -30,7 +30,7 @@ async function getApplied(client: Awaited<ReturnType<Pool['connect']>>): Promise
 }
 
 async function applyFile(
-  client: Awaited<ReturnType<Pool['connect']>>,
+  client: PoolClient,
   filename: string,
   sql: string
 ): Promise<void> {
