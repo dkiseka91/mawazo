@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: mawazo-webhook
+    env: node
+    region: oregon
+    plan: free
+    buildCommand: npm install && npm run build:ordered
+    startCommand: NODE_ENV=production node packages/database/dist/run-migrations.js && node packages/webhook/dist/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mawazo-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: mawazo-redis
+          type: redis
+          property: connectionString
+      - key: LOG_LEVEL
+        value: info
+      # Set these manually in Render dashboard after first deploy:
+      # ANTHROPIC_API_KEY
+      # TELEGRAM_BOT_TOKEN
+      # TELEGRAM_WEBHOOK_SECRET
+      # ADMIN_SECRET
+
+databases:
+  - name: mawazo-db
+    plan: free
+    region: oregon
+
+  - name: mawazo-redis
+    plan: free
+    region: oregon
+    ipAllowList: []
