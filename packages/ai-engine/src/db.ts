@@ -10,10 +10,16 @@ const logger = createLogger('ai-engine:db');
 
 let pool: Pool | null = null;
 
+function requiresSsl(url: string): boolean {
+  return !url.includes('localhost') && !url.includes('127.0.0.1');
+}
+
 export function getPool(): Pool {
   if (!pool) {
+    const url = process.env.DATABASE_URL ?? '';
     pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
+      connectionString: url,
+      ssl: requiresSsl(url) ? { rejectUnauthorized: false } : false,
       max: 5,
       idleTimeoutMillis: 30_000,
       connectionTimeoutMillis: 5_000,
