@@ -17,6 +17,8 @@ import { whatsappRouter } from './routes/whatsapp';
 import { telegramRouter } from './routes/telegram';
 import { adminRouter }    from './routes/admin';
 import { landingRouter }  from './routes/landing';
+import { chatRouter }     from './routes/chat';
+import { momoRouter }     from './routes/momo';
 
 const logger = createLogger('webhook');
 const app = express();
@@ -97,6 +99,12 @@ app.use('/webhook', whatsappRouter);
 
 // ── Telegram bot ──────────────────────────────────────────────────────────────
 app.use('/telegram', telegramLimiter, telegramRouter);
+
+// ── Web-app chat interface ────────────────────────────────────────────────────
+app.use('/chat', chatRouter);
+
+// ── MTN MoMo payment callbacks ────────────────────────────────────────────────
+app.use('/momo', momoRouter);
 
 // ── 404 handler ───────────────────────────────────────────────────────────────
 app.use((_req, res) => {

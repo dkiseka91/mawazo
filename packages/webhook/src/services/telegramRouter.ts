@@ -10,6 +10,7 @@
 import axios from 'axios';
 import { createLogger } from '@mawazo/shared';
 import { processMessage } from '@mawazo/ai-engine';
+import { handleCommand } from './telegramCommands';
 import type { TelegramUpdate, TelegramTextMessage, TelegramMessage } from '../types/telegram';
 
 const logger = createLogger('webhook:telegram');
@@ -68,6 +69,15 @@ export async function handleTelegramUpdate(update: TelegramUpdate): Promise<void
   if (!text) return;
 
   logger.info({ chatId, message: text.substring(0, 100) }, 'Incoming Telegram message');
+
+  // Handle bot commands before the AI engine
+  if (text.startsWith('/')) {
+    const parts   = text.split(/\s+/);
+    const command = parts[0].toLowerCase().split('@')[0]; // strip @botname suffix
+    const args    = parts.slice(1);
+    const handled = await handleCommand(chatId, userId, command, args);
+    if (handled) return;
+  }
 
   const result = await processMessage(userId, text);
   await sendMessage(chatId, result.reply);

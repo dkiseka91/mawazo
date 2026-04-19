@@ -26,6 +26,14 @@ services:
       # TELEGRAM_BOT_TOKEN
       # TELEGRAM_WEBHOOK_SECRET
       # ADMIN_SECRET
+      # WEBAPP_BASE_URL         — your public Render URL e.g. https://mawazo-webhook.onrender.com
+      # MTN MoMo (optional — enables automated subscription payments):
+      # MOMO_SUBSCRIPTION_KEY   — from momodeveloper.mtn.com
+      # MOMO_API_USER           — UUID created via provisioning API
+      # MOMO_API_KEY            — generated via provisioning API
+      # MOMO_BASE_URL           — https://sandbox.momodeveloper.mtn.com OR https://proxy.momoapi.mtn.com
+      # MOMO_TARGET_ENVIRONMENT — sandbox OR mtnuganda
+      # MOMO_CALLBACK_URL       — https://your-app.onrender.com/momo/callback
 
 databases:
   - name: mawazo-db

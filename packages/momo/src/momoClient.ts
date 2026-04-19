@@ -1,20 +1,18 @@
 /**
- * MTN MoMo API client — STUB IMPLEMENTATION
+ * MTN MoMo Collections API client.
  *
- * This module provides the interface for MTN Mobile Money integration.
- * All methods return stub data at MVP stage. Full implementation
- * requires an approved MTN MoMo API subscription from:
- * https://momodeveloper.mtn.com
+ * Implements OAuth2 token management + request-to-pay flow.
  *
  * To activate:
- * 1. Apply for MTN MoMo Collections API access
- * 2. Set MOMO_SUBSCRIPTION_KEY, MOMO_API_USER, MOMO_API_KEY in .env
- * 3. Replace stub methods with real HTTP calls to the MoMo API
- *    (see MTN MoMo API reference: https://momodeveloper.mtn.com/api-documentation)
- * 4. Implement OAuth2 token refresh (tokens expire every hour)
- * 5. Store encrypted tokens in momo_connections table
+ * 1. Register at https://momodeveloper.mtn.com and subscribe to Collections
+ * 2. Create API user/key via the provisioning API (sandbox) or get them from MTN (production)
+ * 3. Set env vars: MOMO_SUBSCRIPTION_KEY, MOMO_API_USER, MOMO_API_KEY,
+ *                  MOMO_BASE_URL (sandbox: https://sandbox.momodeveloper.mtn.com),
+ *                  MOMO_TARGET_ENVIRONMENT (sandbox | mtnuganda)
  */
 
+import axios from 'axios';
+import crypto from 'crypto';
 import { createLogger } from '@mawazo/shared';
 import type {
   MoMoBalance,
@@ -28,94 +26,168 @@ const logger = createLogger('momo');
 
 export class NotImplementedError extends Error {
   constructor(method: string) {
-    super(`MoMo ${method} is not yet implemented. See packages/momo/src/momoClient.ts for activation steps.`);
+    super(`MoMo ${method} not yet implemented. See packages/momo/src/momoClient.ts.`);
     this.name = 'NotImplementedError';
   }
 }
 
 export class MoMoClient {
   private readonly config: MoMoClientConfig;
+  private accessToken:  string | null = null;
+  private tokenExpiry:  number = 0;
 
   constructor(config: MoMoClientConfig) {
-    // Validate required config at construction time — fail fast
     const required: (keyof MoMoClientConfig)[] = [
       'subscriptionKey', 'apiUser', 'apiKey', 'baseUrl', 'targetEnvironment',
     ];
     for (const key of required) {
-      if (!config[key]) {
-        throw new Error(`MoMoClient: missing required config: ${key}`);
-      }
+      if (!config[key]) throw new Error(`MoMoClient: missing required config: ${key}`);
     }
     this.config = config;
-    logger.info({ baseUrl: config.baseUrl, env: config.targetEnvironment }, 'MoMo client initialised (stub)');
+    logger.info({ baseUrl: config.baseUrl, env: config.targetEnvironment }, 'MoMo client initialised');
+  }
+
+  // ── OAuth2 token ─────────────────────────────────────────────────────────────
+
+  private async getAccessToken(): Promise<string> {
+    // Reuse cached token if it won't expire in the next 60 s
+    if (this.accessToken && Date.now() < this.tokenExpiry - 60_000) {
+      return this.accessToken;
+    }
+
+    const credentials = Buffer.from(`${this.config.apiUser}:${this.config.apiKey}`).toString('base64');
+    const { data } = await axios.post<{ access_token: string; expires_in: number }>(
+      `${this.config.baseUrl}/collection/token/`,
+      null,
+      {
+        headers: {
+          Authorization: `Basic ${credentials}`,
+          'Ocp-Apim-Subscription-Key': this.config.subscriptionKey,
+        },
+        timeout: 10_000,
+      }
+    );
+
+    this.accessToken = data.access_token;
+    this.tokenExpiry = Date.now() + data.expires_in * 1_000;
+    return this.accessToken;
+  }
+
+  // ── Collections API ───────────────────────────────────────────────────────────
+
+  /**
+   * Initiate a request-to-pay (pull payment from customer's MoMo wallet).
+   * Returns a referenceId — use getPaymentStatus() to poll for completion.
+   *
+   * POST /collection/v1_0/requesttopay
+   */
+  async initiatePayment(input: InitiatePaymentInput): Promise<InitiatePaymentResult> {
+    const token       = await this.getAccessToken();
+    const referenceId = crypto.randomUUID();
+
+    await axios.post(
+      `${this.config.baseUrl}/collection/v1_0/requesttopay`,
+      {
+        amount:     input.amount.toString(),
+        currency:   input.currency,
+        externalId: input.externalId,
+        payer: {
+          partyIdType: 'MSISDN',
+          partyId:     input.payerPhoneNumber,
+        },
+        payerMessage: input.payerMessage,
+        payeeNote:    input.payeeNote,
+      },
+      {
+        headers: {
+          Authorization:              `Bearer ${token}`,
+          'X-Reference-Id':           referenceId,
+          'X-Target-Environment':     this.config.targetEnvironment,
+          'Ocp-Apim-Subscription-Key': this.config.subscriptionKey,
+          'Content-Type':             'application/json',
+          ...(this.config.callbackUrl
+            ? { 'X-Callback-Url': this.config.callbackUrl }
+            : {}),
+        },
+        timeout: 15_000,
+      }
+    );
+
+    logger.info({ referenceId, amount: input.amount, payer: input.payerPhoneNumber }, 'MoMo payment initiated');
+    return { referenceId, status: 'PENDING' };
   }
 
   /**
-   * Check the balance of a linked MoMo account.
+   * Poll payment status.
+   * Returns: 'SUCCESSFUL' | 'FAILED' | 'PENDING'
    *
-   * TODO: Replace stub with GET /collection/v1_0/account/balance
-   * Requires Bearer token from OAuth2 token endpoint.
+   * GET /collection/v1_0/requesttopay/{referenceId}
+   */
+  async getPaymentStatus(referenceId: string): Promise<string> {
+    const token = await this.getAccessToken();
+    const { data } = await axios.get<{ status: string }>(
+      `${this.config.baseUrl}/collection/v1_0/requesttopay/${referenceId}`,
+      {
+        headers: {
+          Authorization:              `Bearer ${token}`,
+          'X-Target-Environment':     this.config.targetEnvironment,
+          'Ocp-Apim-Subscription-Key': this.config.subscriptionKey,
+        },
+        timeout: 10_000,
+      }
+    );
+    return data.status;
+  }
+
+  /**
+   * Check wallet balance.
+   * GET /collection/v1_0/account/balance
    */
   async checkBalance(_accountNumber: string): Promise<MoMoBalance> {
-    logger.warn('checkBalance called — returning stub data (not implemented)');
-    // TODO: Implement MTN MoMo Collections API balance check
+    const token = await this.getAccessToken();
+    const { data } = await axios.get<{ availableBalance: string; currency: string }>(
+      `${this.config.baseUrl}/collection/v1_0/account/balance`,
+      {
+        headers: {
+          Authorization:              `Bearer ${token}`,
+          'X-Target-Environment':     this.config.targetEnvironment,
+          'Ocp-Apim-Subscription-Key': this.config.subscriptionKey,
+        },
+        timeout: 10_000,
+      }
+    );
     return {
-      availableBalance: 0,
-      currency: 'UGX',
-      provider: 'mtn_momo',
+      availableBalance: parseFloat(data.availableBalance),
+      currency:         data.currency,
+      provider:         'mtn_momo',
     };
   }
 
-  /**
-   * Fetch transaction history for a MoMo account within a date range.
-   *
-   * TODO: Replace stub with GET /collection/v1_0/accountholder/MSISDN/{accountNumber}/basicuserinfo
-   * Note: MTN MoMo API does not provide full transaction history via API —
-   * this typically requires a partnership agreement for statement access.
-   * Alternative: prompt user to forward MoMo SMS notifications for parsing.
-   */
+  // Transaction history is not available via standard MTN Open API —
+  // requires a separate statement-access partnership agreement.
   async getTransactionHistory(
     _accountNumber: string,
     _from: Date,
     _to: Date
   ): Promise<MoMoTransaction[]> {
-    logger.warn('getTransactionHistory called — returning stub [] (not implemented)');
-    // TODO: Implement transaction history retrieval
+    logger.warn('getTransactionHistory not available via MTN Open API — returning []');
     return [];
-  }
-
-  /**
-   * Initiate a payment request (Collections API — pull payment from customer).
-   *
-   * TODO: Replace stub with POST /collection/v1_0/requesttopay
-   * Headers required: X-Reference-Id (UUID), X-Target-Environment, Ocp-Apim-Subscription-Key
-   *
-   * @throws NotImplementedError — do not call in production until implemented
-   */
-  async initiatePayment(_input: InitiatePaymentInput): Promise<InitiatePaymentResult> {
-    logger.warn('initiatePayment called — stub, throwing NotImplementedError');
-    // TODO: Implement MTN MoMo Collections payment initiation
-    throw new NotImplementedError('initiatePayment');
-  }
-
-  /**
-   * Get the status of a previously initiated payment.
-   *
-   * TODO: Implement GET /collection/v1_0/requesttopay/{referenceId}
-   */
-  async getPaymentStatus(_referenceId: string): Promise<string> {
-    logger.warn('getPaymentStatus called — stub, throwing NotImplementedError');
-    // TODO: Implement payment status check
-    throw new NotImplementedError('getPaymentStatus');
   }
 }
 
 /**
  * Create a MoMoClient from environment variables.
- * Returns null if any required env vars are missing (MoMo is optional at MVP).
+ * Returns null if required env vars are absent (MoMo is optional at MVP).
  */
 export function createMoMoClientFromEnv(): MoMoClient | null {
-  const { MOMO_SUBSCRIPTION_KEY, MOMO_API_USER, MOMO_API_KEY, MOMO_BASE_URL, MOMO_TARGET_ENVIRONMENT } = process.env;
+  const {
+    MOMO_SUBSCRIPTION_KEY,
+    MOMO_API_USER,
+    MOMO_API_KEY,
+    MOMO_BASE_URL,
+    MOMO_TARGET_ENVIRONMENT,
+    MOMO_CALLBACK_URL,
+  } = process.env;
 
   if (!MOMO_SUBSCRIPTION_KEY || !MOMO_API_USER || !MOMO_API_KEY) {
     logger.info('MoMo env vars not set — MoMo integration disabled');
@@ -127,6 +199,7 @@ export function createMoMoClientFromEnv(): MoMoClient | null {
     apiUser:           MOMO_API_USER,
     apiKey:            MOMO_API_KEY,
     baseUrl:           MOMO_BASE_URL ?? 'https://sandbox.momodeveloper.mtn.com',
-    targetEnvironment: (MOMO_TARGET_ENVIRONMENT as 'sandbox' | 'production') ?? 'sandbox',
+    targetEnvironment: (MOMO_TARGET_ENVIRONMENT as 'sandbox' | 'mtnuganda') ?? 'sandbox',
+    callbackUrl:       MOMO_CALLBACK_URL,
   });
 }

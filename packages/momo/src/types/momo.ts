@@ -41,9 +41,10 @@ export interface InitiatePaymentResult {
 }
 
 export interface MoMoClientConfig {
-  subscriptionKey: string;
-  apiUser: string;
-  apiKey: string;
-  baseUrl: string;
-  targetEnvironment: 'sandbox' | 'production';
+  subscriptionKey:   string;
+  apiUser:           string;
+  apiKey:            string;
+  baseUrl:           string;
+  targetEnvironment: 'sandbox' | 'production' | 'mtnuganda';
+  callbackUrl?:      string;
 }

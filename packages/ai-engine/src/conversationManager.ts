@@ -128,3 +128,11 @@ export async function pingRedis(): Promise<boolean> {
   const result = await getRedis().ping();
   return result === 'PONG';
 }
+
+export async function storeWebappToken(token: string, userId: string): Promise<void> {
+  await getRedis().set(`webapp:${token}`, userId, 'EX', 86_400); // 24 h
+}
+
+export async function getWebappUserId(token: string): Promise<string | null> {
+  return getRedis().get(`webapp:${token}`);
+}
