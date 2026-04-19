@@ -37,8 +37,8 @@ async function runMigrations(): Promise<void> {
     const { rows } = await client.query('SELECT filename FROM schema_migrations');
     const applied = new Set(rows.map((r: { filename: string }) => r.filename));
 
-    const migrationsDir = path.join(__dirname, 'migrations');
-    const seedsDir      = path.join(__dirname, 'seeds');
+    const migrationsDir = path.join(__dirname, '..', 'migrations');
+    const seedsDir      = path.join(__dirname, '..', 'seeds');
 
     const migrationFiles = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
     const seedFiles      = fs.readdirSync(seedsDir).filter((f) => f.endsWith('.sql')).sort();
