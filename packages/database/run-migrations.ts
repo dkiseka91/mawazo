@@ -15,7 +15,7 @@ import { Pool } from 'pg';
 
 if (!process.env.DATABASE_URL) {
   console.error('ERROR: DATABASE_URL environment variable is not set.');
-  console.error('In Railway: service → Variables → Add Reference → DATABASE_URL');
+  console.error('Set DATABASE_URL in your hosting provider\'s environment variables.');
   process.exit(1);
 }
 
