@@ -15,7 +15,7 @@ import { Pool } from 'pg';
 
 if (!process.env.DATABASE_URL) {
   console.error('ERROR: DATABASE_URL environment variable is not set.');
-  console.error('In Railway: service → Variables → Add Reference → DATABASE_URL');
+  console.error('Set DATABASE_URL in your hosting provider\'s environment variables.');
   process.exit(1);
 }
 
@@ -37,8 +37,8 @@ async function runMigrations(): Promise<void> {
     const { rows } = await client.query('SELECT filename FROM schema_migrations');
     const applied = new Set(rows.map((r: { filename: string }) => r.filename));
 
-    const migrationsDir = path.join(__dirname, 'migrations');
-    const seedsDir      = path.join(__dirname, 'seeds');
+    const migrationsDir = path.join(__dirname, '..', 'migrations');
+    const seedsDir      = path.join(__dirname, '..', 'seeds');
 
     const migrationFiles = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
     const seedFiles      = fs.readdirSync(seedsDir).filter((f) => f.endsWith('.sql')).sort();
