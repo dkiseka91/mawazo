@@ -5,6 +5,7 @@
 
 import { getPool } from '../db';
 import { createLogger, formatUGX, parseUGXAmount } from '@mawazo/shared';
+import { checkMonthlyLimit, buildUpgradePrompt } from '../tierLimits';
 import type { ClassifiedIntent } from '../types/intents';
 
 const logger = createLogger('ai-engine:logExpense');
@@ -20,9 +21,8 @@ export async function handleLogExpense(
 ): Promise<string> {
   const pool = getPool();
 
-  // Get business
-  const { rows: businessRows } = await pool.query<{ id: string; name: string | null }>(
-    'SELECT id, name FROM businesses WHERE phone_number = $1',
+  const { rows: businessRows } = await pool.query<{ id: string; name: string | null; subscription_tier: string }>(
+    'SELECT id, name, subscription_tier FROM businesses WHERE phone_number = $1',
     [phoneNumber]
   );
 
@@ -32,7 +32,12 @@ export async function handleLogExpense(
 
   const business = businessRows[0];
 
-  // Use amount from entities, or try to parse from the raw message
+  // Enforce monthly transaction limit for this tier
+  const tierCheck = await checkMonthlyLimit(business.id, business.subscription_tier ?? 'free');
+  if (!tierCheck.allowed) {
+    return buildUpgradePrompt(tierCheck);
+  }
+
   let amountUgx = classified.entities.amount_ugx;
   if (!amountUgx) {
     const parsed = parseUGXAmount(userMessage);
@@ -46,7 +51,6 @@ export async function handleLogExpense(
   const description = classified.entities.description ?? 'Expense';
   const category    = classified.entities.category ?? 'Operating Expenses';
 
-  // Find matching system category (escape LIKE wildcards from AI-extracted category)
   const { rows: catRows } = await pool.query<{ id: string }>(
     `SELECT id FROM categories
       WHERE is_system_default = true
@@ -66,8 +70,6 @@ export async function handleLogExpense(
 
     logger.info({ businessId: business.id, amountUgx }, 'Expense recorded');
 
-    // Use Claude's reply (preserves user's language — Luganda, English, etc.)
-    // Fall back to English template if Claude's reply looks like a fallback/error.
     const claudeReply = classified.reply;
     if (claudeReply && !claudeReply.startsWith("I didn't quite understand")) {
       return claudeReply;

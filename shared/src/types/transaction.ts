@@ -1,5 +1,5 @@
 export type TransactionType = 'debit' | 'credit';
-export type TransactionSource = 'whatsapp' | 'momo' | 'manual' | 'ocr';
+export type TransactionSource = 'whatsapp' | 'telegram' | 'webapp' | 'momo' | 'manual' | 'ocr';
 
 export interface Transaction {
   id: string;

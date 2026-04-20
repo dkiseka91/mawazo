@@ -5,6 +5,7 @@
 
 import { getPool } from '../db';
 import { createLogger, formatUGX, parseUGXAmount } from '@mawazo/shared';
+import { checkMonthlyLimit, buildUpgradePrompt } from '../tierLimits';
 import type { ClassifiedIntent } from '../types/intents';
 
 const logger = createLogger('ai-engine:logIncome');
@@ -20,8 +21,8 @@ export async function handleLogIncome(
 ): Promise<string> {
   const pool = getPool();
 
-  const { rows: businessRows } = await pool.query<{ id: string; name: string | null }>(
-    'SELECT id, name FROM businesses WHERE phone_number = $1',
+  const { rows: businessRows } = await pool.query<{ id: string; name: string | null; subscription_tier: string }>(
+    'SELECT id, name, subscription_tier FROM businesses WHERE phone_number = $1',
     [phoneNumber]
   );
 
@@ -30,6 +31,12 @@ export async function handleLogIncome(
   }
 
   const business = businessRows[0];
+
+  // Enforce monthly transaction limit for this tier
+  const tierCheck = await checkMonthlyLimit(business.id, business.subscription_tier ?? 'free');
+  if (!tierCheck.allowed) {
+    return buildUpgradePrompt(tierCheck);
+  }
 
   let amountUgx = classified.entities.amount_ugx;
   if (!amountUgx) {

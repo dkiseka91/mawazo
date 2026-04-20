@@ -125,4 +125,6 @@ export async function checkHealth(): Promise<{ db: boolean; redis: boolean }> {
 }
 
 export { getPool, closePool } from './db';
+export { TIER_LIMITS, TIER_PRICES_UGX } from './tierLimits';
+export { storeWebappToken, getWebappUserId, getSession } from './conversationManager';
 export type { ProcessMessageResult } from './types/intents';

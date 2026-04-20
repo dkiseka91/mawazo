@@ -103,9 +103,20 @@ export async function updateOnboardingStep(
   businessId: string,
   step: ConversationSession['onboardingStep']
 ): Promise<void> {
-  const session = await getSession(businessId);
-  if (!session) return;
-  session.onboardingStep = step;
+  let session = await getSession(businessId);
+  if (!session) {
+    // Session may not exist yet (e.g. Redis was briefly unavailable during appendMessage).
+    // Create a minimal session so the step is always persisted.
+    session = {
+      businessId,
+      messages: [],
+      intentLog: [],
+      onboardingStep: step,
+      lastActive: new Date().toISOString(),
+    };
+  } else {
+    session.onboardingStep = step;
+  }
   await saveSession(session);
 }
 
@@ -116,4 +127,12 @@ export async function deleteSession(businessId: string): Promise<void> {
 export async function pingRedis(): Promise<boolean> {
   const result = await getRedis().ping();
   return result === 'PONG';
+}
+
+export async function storeWebappToken(token: string, userId: string): Promise<void> {
+  await getRedis().set(`webapp:${token}`, userId, 'EX', 86_400); // 24 h
+}
+
+export async function getWebappUserId(token: string): Promise<string | null> {
+  return getRedis().get(`webapp:${token}`);
 }

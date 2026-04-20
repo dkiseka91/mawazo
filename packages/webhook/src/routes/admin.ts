@@ -16,12 +16,13 @@ const logger = createLogger('webhook:admin');
 
 // ── Auth middleware ────────────────────────────────────────────────────────────
 function adminAuth(req: Request, res: Response, next: NextFunction): void {
-  const secret = process.env.ADMIN_SECRET;
+  const secret = (process.env.ADMIN_SECRET ?? '').trim();
   if (!secret) {
     res.status(503).json({ error: 'Admin panel not configured (ADMIN_SECRET not set)' });
     return;
   }
-  const token = (req.query.token as string) ?? req.headers['x-admin-secret'];
+  const rawToken = (req.query.token as string | undefined) ?? (req.headers['x-admin-secret'] as string | undefined) ?? '';
+  const token = rawToken.trim();
   if (token !== secret) {
     if (req.path === '/' || req.path === '') {
       // Return login page for browser requests
