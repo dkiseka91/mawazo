@@ -10,7 +10,7 @@
 
 import { getPool } from '../db';
 import { createLogger, formatUGX } from '@mawazo/shared';
-import { appendMessage, updateOnboardingStep, getSession } from '../conversationManager';
+import { appendMessage } from '../conversationManager';
 import type { ClassifiedIntent } from '../types/intents';
 import type { Business } from '@mawazo/shared';
 
@@ -37,61 +37,53 @@ export async function handleOnboarding(
       return `Welcome back${business.name ? `, ${business.name}` : ''}! 👋\n\nThis month so far:\n• Income: ${formatUGX(summary.income)}\n• Expenses: ${formatUGX(summary.expenses)}\n• Net: ${formatUGX(summary.income - summary.expenses)}\n\nWhat would you like to record today?`;
     }
 
-    const session = await getSession(phoneNumber);
-    const step = session?.onboardingStep ?? null;
+    // Read onboarding step from DB — reliable across Redis failures and server restarts
+    const step = (rows[0]?.onboarding_step as string | null | undefined) ?? null;
 
     if (!step || step === 'ask_name') {
-      // First time — create or find business record
       if (rows.length === 0) {
         await pool.query(
-          'INSERT INTO businesses (phone_number) VALUES ($1) ON CONFLICT (phone_number) DO NOTHING',
+          `INSERT INTO businesses (phone_number, onboarding_step)
+           VALUES ($1, 'ask_business_type')
+           ON CONFLICT (phone_number) DO UPDATE SET onboarding_step = 'ask_business_type'`,
+          [phoneNumber]
+        );
+      } else {
+        await pool.query(
+          `UPDATE businesses SET onboarding_step = 'ask_business_type' WHERE phone_number = $1`,
           [phoneNumber]
         );
       }
-
-      await updateOnboardingStep(phoneNumber, 'ask_business_type');
 
       return "Hello! I'm Mawazo, your AI bookkeeper 📒\n\nI'll help you track income and expenses through Telegram — no spreadsheets, no hassle.\n\nFirst, what's the name of your business?";
     }
 
     if (step === 'ask_business_type') {
-      // Prefer Claude's extracted description entity (strips "My business name is ..."),
-      // fall back to raw message only if entity extraction failed.
       const businessName = (classified.entities.description?.trim() || userMessage.trim());
       await pool.query(
-        'UPDATE businesses SET name = $1 WHERE phone_number = $2',
+        `UPDATE businesses SET name = $1, onboarding_step = 'ask_industry' WHERE phone_number = $2`,
         [businessName, phoneNumber]
       );
-      await updateOnboardingStep(phoneNumber, 'ask_industry');
 
       return `Great name — ${businessName}! 🎉\n\nWhat type of business is it? (e.g. retail shop, restaurant, salon, transport, farming, services)`;
     }
 
     if (step === 'ask_industry') {
-      // If the user sent a transaction instead of answering the industry question,
-      // complete onboarding with a sensible default so the transaction is not lost.
       const isTransaction = classified.intent === 'log_expense' || classified.intent === 'log_income';
       const industry = isTransaction ? 'general' : userMessage.trim();
 
       await pool.query(
         `UPDATE businesses
-            SET industry = $1, onboarding_complete = true
+            SET industry = $1, onboarding_complete = true, onboarding_step = 'complete'
           WHERE phone_number = $2`,
         [industry, phoneNumber]
       );
-      await updateOnboardingStep(phoneNumber, 'complete');
 
-      if (isTransaction) {
-        // Signal to processMessage that onboarding is now done so it can re-route
-        // to the correct transaction handler. We return a sentinel string starting
-        // with "__REROUTE__" that processMessage detects.
-        return '__REROUTE__';
-      }
+      if (isTransaction) return '__REROUTE__';
 
       return `Perfect! You're all set up ✅\n\nYou can now record transactions like:\n• "Sold goods for 150,000"\n• "Paid rent 400,000"\n• "Show me this month's profit"\n\nWhat's your first entry?`;
     }
 
-    // Fallback — return Claude's reply
     return classified.reply;
   } catch (err) {
     logger.error({ err, phoneNumber }, 'Onboarding handler error');
