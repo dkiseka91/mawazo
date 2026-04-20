@@ -9,6 +9,7 @@ export interface Business {
   currency: string;
   tin_number: string | null;
   onboarding_complete: boolean;
+  onboarding_step: string | null;
   subscription_tier: SubscriptionTier;
   created_at: Date;
   updated_at: Date;
